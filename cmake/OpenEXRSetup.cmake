@@ -190,52 +190,87 @@ if(OPENEXR_FORCE_INTERNAL_ZLIB OR NOT TARGET ZLIB::ZLIB)
     set(zlib_INTERNAL_DIR "${CMAKE_BINARY_DIR}/zlib-install" CACHE PATH "zlib install dir")
   endif()
 
+  get_property(isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if (isMultiConfig AND MSVC)
+    set(zlib_BYPRODUCTS
+            "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}zlib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}zlibd${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_STATIC_PREFIX}zlibstatic${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zlibstaticd${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            )
+  else()
+    if(WIN32)
+      if (MSVC AND ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+        set(zlib_LIBNAME "zlibd")
+        set(zlib_STATICLIBNAME "zlibstaticd")
+      else()
+        set(zlib_LIBNAME "zlib")
+        set(zlib_STATICLIBNAME "zlibstatic")
+      endif()
+    else()
+      set(zlib_LIBNAME "z")
+      set(zlib_STATICLIBNAME "z")
+    endif()
+    set(zlib_BYPRODUCTS
+            "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}${zlib_LIBNAME}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${zlib_STATICLIBNAME}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            )
+  endif()
+
   # Need to set byproducts so ninja generator knows where the targets come from
   ExternalProject_Add(zlib_external
-    GIT_REPOSITORY "https://github.com/madler/zlib.git"
-    GIT_SHALLOW ON
-    GIT_TAG "v${zlib_VER}"
-    UPDATE_COMMAND ""
-    SOURCE_DIR zlib-src
-    BINARY_DIR zlib-build
-    INSTALL_DIR ${zlib_INTERNAL_DIR}
-    BUILD_BYPRODUCTS
-      "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}z${CMAKE_SHARED_LIBRARY_SUFFIX}"
-      "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}z${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    CMAKE_ARGS
-      -D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -D CMAKE_POSITION_INDEPENDENT_CODE=ON
-      -D CMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-      -D CMAKE_GENERATOR:STRING=${CMAKE_GENERATOR}
-      ${cmake_cc_arg}
-      )
+          GIT_REPOSITORY "https://github.com/madler/zlib.git"
+          GIT_SHALLOW ON
+          GIT_TAG "v${zlib_VER}"
+          UPDATE_COMMAND ""
+          SOURCE_DIR zlib-src
+          BINARY_DIR zlib-build
+          INSTALL_DIR ${zlib_INTERNAL_DIR}
+          BUILD_BYPRODUCTS ${zlib_BYPRODUCTS}
+          CMAKE_ARGS
+          -D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+          -D CMAKE_POSITION_INDEPENDENT_CODE=ON
+          -D CMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+          -D CMAKE_GENERATOR:STRING=${CMAKE_GENERATOR}
+          ${cmake_cc_arg}
+          )
 
   file(MAKE_DIRECTORY "${zlib_INTERNAL_DIR}")
   file(MAKE_DIRECTORY "${zlib_INTERNAL_DIR}/include")
   file(MAKE_DIRECTORY "${zlib_INTERNAL_DIR}/lib")
 
-  if(WIN32)
-    set(zliblibname "zlib")
-    set(zlibstaticlibname "zlibstatic")
-  else()
-    set(zliblibname "z")
-    set(zlibstaticlibname "z")
-  endif()
-
   if(NOT (APPLE OR WIN32) AND BUILD_SHARED_LIBS AND NOT OPENEXR_FORCE_INTERNAL_ZLIB)
     add_library(zlib_shared SHARED IMPORTED GLOBAL)
     add_dependencies(zlib_shared zlib_external)
-    set_property(TARGET zlib_shared PROPERTY
-      IMPORTED_LOCATION "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}${zliblibname}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-      )
+    if (isMultiConfig AND MSVC)
+      set_target_properties(zlib_shared PROPERTIES
+              IMPORTED_LOCATION_DEBUG "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}zlibd${CMAKE_SHARED_LIBRARY_SUFFIX}"
+              IMPORTED_LOCATION_RELEASE "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}zlib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+              IMPORTED_LOCATION_MINSIZEREL "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}zlib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+              IMPORTED_LOCATION_RELWITHDEBINFO "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}zlib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+              )
+    else()
+      set_property(TARGET zlib_shared PROPERTY
+              IMPORTED_LOCATION "${zlib_INTERNAL_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}${zlib_LIBNAME}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+              )
+    endif()
     target_include_directories(zlib_shared INTERFACE "${zlib_INTERNAL_DIR}/include")
   endif()
 
   add_library(zlib_static STATIC IMPORTED GLOBAL)
   add_dependencies(zlib_static zlib_external)
-  set_property(TARGET zlib_static PROPERTY
-    IMPORTED_LOCATION "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${zlibstaticlibname}${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    )
+  if (isMultiConfig AND MSVC)
+    set_target_properties(zlib_static PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zlibstaticd${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            IMPORTED_LOCATION_RELEASE "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zlibstatic${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            IMPORTED_LOCATION_MINSIZEREL "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zlibstatic${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            IMPORTED_LOCATION_RELWITHDEBINFO "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}zlibstatic${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            )
+  else()
+    set_property(TARGET zlib_static PROPERTY
+            IMPORTED_LOCATION "${zlib_INTERNAL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${zlib_STATICLIBNAME}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+            )
+  endif()
   target_include_directories(zlib_static INTERFACE "${zlib_INTERNAL_DIR}/include")
 
   if(NOT (APPLE OR WIN32) AND BUILD_SHARED_LIBS AND NOT OPENEXR_FORCE_INTERNAL_ZLIB)
